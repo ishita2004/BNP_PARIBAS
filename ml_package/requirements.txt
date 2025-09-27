@@ -1,0 +1,9 @@
+pandas
+tabula-py
+pdf2image
+pytesseract
+openpyxl
+lxml
+prophet
+pymongo
+
