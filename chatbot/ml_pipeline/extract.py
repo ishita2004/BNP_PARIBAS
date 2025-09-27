@@ -1,19 +1,15 @@
-import pdfplumber
 import pandas as pd
+import pdfplumber
 import os
-import json
-import xml.etree.ElementTree as ET
 
-# -------------------------
-# Text-based PDF extraction
-# -------------------------
-def pdf_to_dataframe(pdf_path):
+def pdf_to_dataframe(pdf_path, output_folder="data"):
     """
-    Extract text from a text-based PDF and convert to structured DataFrame.
-    Customize parsing depending on your PDF layout.
+    Extract text from a text-based PDF and convert it into a structured DataFrame.
+    Save CSV and pickle inside output_folder.
     """
     all_text = []
 
+    # Open PDF
     with pdfplumber.open(pdf_path) as pdf:
         for page_num, page in enumerate(pdf.pages, start=1):
             text = page.extract_text()
@@ -21,72 +17,51 @@ def pdf_to_dataframe(pdf_path):
                 all_text.append(text)
             print(f"[PDF] Page {page_num} processed for {os.path.basename(pdf_path)}.")
 
+    # Combine all pages
     full_text = "\n".join(all_text)
 
     # Split lines and clean
     rows = [line.strip() for line in full_text.split("\n") if line.strip()]
 
-    # Customize column names based on your PDF structure
+    # Define column names (customize as per PDF layout)
     columns = [
-        'transaction_id','customer_id','timestamp','transaction_type',
-        'amount','fraud_flag','hour_of_day','day_of_week','is_weekend'
+        'transaction_id', 'customer_id', 'timestamp', 'transaction_type',
+        'amount', 'fraud_flag', 'hour_of_day', 'day_of_week', 'is_weekend'
     ]
 
+    # Parse rows
     records = []
     for line in rows:
         parts = line.split()
         if len(parts) >= len(columns):
             records.append(parts[:len(columns)])
 
-    return pd.DataFrame(records, columns=columns)
+    df = pd.DataFrame(records, columns=columns)
 
-# -------------------------
-# Single file extraction
-# -------------------------
-def extract_file(file_path):
-    ext = file_path.split('.')[-1].lower()
+    # Convert numeric columns
+    numeric_cols = ['amount', 'fraud_flag', 'hour_of_day', 'is_weekend']
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    if ext == 'csv':
-        return pd.read_csv(file_path)
-    elif ext in ['xls','xlsx']:
-        return pd.read_excel(file_path)
-    elif ext == 'json':
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return pd.json_normalize(data)
-    elif ext == 'xml':
-        tree = ET.parse(file_path)
-        root = tree.getroot()
-        data = [{child.tag: child.text for child in elem} for elem in root]
-        return pd.DataFrame(data)
-    elif ext == 'pdf':
-        try:
-            import tabula
-            tables = tabula.read_pdf(file_path, pages='all', multiple_tables=True)
-            if tables:
-                return pd.concat(tables, ignore_index=True)
-        except:
-            pass
-        # Use text-based extraction
-        return pdf_to_dataframe(file_path)
-    else:
-        raise ValueError(f"Unsupported file type: {ext}")
+    # Convert timestamp column to datetime
+    if 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
 
-# -------------------------
-# Extract all files in folder
-# -------------------------
-def extract_all(folder_path="data"):
-    file_df_map = {}
-    files = os.listdir(folder_path)
-    print("Files found:", files)
+    # Ensure output folder exists
+    os.makedirs(output_folder, exist_ok=True)
 
-    for file in files:
-        file_path = os.path.join(folder_path, file)
-        try:
-            df = extract_file(file_path)
-            file_df_map[file] = df
-            print(f"[EXTRACT] {file} processed successfully. Shape: {df.shape}")
-            print(df.head(5))
-        except Exception as e:
-            print(f"[EXTRACT ERROR] {file}: {e}")
-    return file_df_map
+    # Save to CSV and pickle inside data folder
+    base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+    csv_file = os.path.join(output_folder, f"{base_name}.csv")
+    pickle_file = os.path.join(output_folder, f"{base_name}.pkl")
+
+    df.to_csv(csv_file, index=False, encoding='utf-8')
+    df.to_pickle(pickle_file)
+
+    print(f"PDF converted to DataFrame and saved as CSV ({csv_file}) and pickle ({pickle_file}). Rows: {len(df)}")
+    return df
+
+# --- Run the function for your PDF ---
+pdf_file = "customer_trade.pdf"
+df_trade = pdf_to_dataframe(pdf_file, output_folder="data")
