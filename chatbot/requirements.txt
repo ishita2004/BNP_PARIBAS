@@ -1,6 +1,9 @@
-fastapi
-uvicorn
 pandas
+tabula-py
+pdf2image
+pytesseract
+openpyxl
+lxml
+prophet
 pymongo
-openai
-python-dotenv
+
